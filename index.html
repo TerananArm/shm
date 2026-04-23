@@ -282,17 +282,37 @@
                 const showM = [2, 3, 4, 5, 6].includes(topic);
                 const showL = [6].includes(topic);
 
-                const InputNum = ({ val, setVal, unit }) => (
-                    <div className="flex items-center gap-1 bg-slate-100 rounded-md border border-slate-200 overflow-hidden focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200 transition-all">
-                        <input 
-                            type="number" 
-                            value={val === 0 && val !== val ? '' : val} 
-                            onChange={e => setVal(e.target.value === '' ? 0 : Number(e.target.value))} 
-                            className="w-16 bg-transparent text-blue-600 font-mono font-black text-center outline-none py-1 text-sm"
-                        />
-                        <span className="text-[10px] font-bold text-slate-400 pr-2">{unit}</span>
-                    </div>
-                );
+                const InputNum = ({ val, setVal, unit }) => {
+                    const [localVal, setLocalVal] = useState(val.toString());
+                    
+                    useEffect(() => {
+                        if (Number(localVal) !== val) {
+                            setLocalVal(val.toString());
+                        }
+                    }, [val]);
+
+                    const handleChange = (e) => {
+                        const str = e.target.value;
+                        setLocalVal(str);
+                        const num = Number(str);
+                        if (!isNaN(num)) {
+                            setVal(num);
+                        }
+                    };
+
+                    return (
+                        <div className="flex items-center gap-1 bg-slate-100 rounded-md border border-slate-200 overflow-hidden focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200 transition-all">
+                            <input 
+                                type="number" 
+                                step="any"
+                                value={localVal} 
+                                onChange={handleChange} 
+                                className="w-16 bg-transparent text-blue-600 font-mono font-black text-center outline-none py-1 text-sm"
+                            />
+                            <span className="text-[10px] font-bold text-slate-400 pr-2">{unit}</span>
+                        </div>
+                    );
+                };
 
                 return (
                     <div className={`grid gap-6 ${showA || showL ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
