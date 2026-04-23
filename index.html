@@ -30,11 +30,12 @@
         const { useState, useEffect, useRef, useMemo } = React;
 
         const App = () => {
-            const [topic, setTopic] = useState(5); // Start with Topic 5 (Spring) to show clear logic
+            const [topic, setTopic] = useState(1);
             const [params, setParams] = useState({ k: 15, m: 1.0, A: 60, L: 1.5, g: 9.8 });
             const [time, setTime] = useState(0);
             const requestRef = useRef();
             const prevT = useRef();
+            const graphHistory = useRef([]);
 
             useEffect(() => {
                 const animate = (t) => {
@@ -51,24 +52,38 @@
 
             const physics = useMemo(() => {
                 const isPendulum = topic === 6;
-                // สูตรหัวใจ: โอเมก้า (ความเร็วเชิงมุม)
                 const omega = isPendulum ? Math.sqrt(params.g / params.L) : Math.sqrt(params.k / params.m);
                 const T = (2 * Math.PI) / omega;
                 const phase = omega * time;
                 
                 // คำนวณตำแหน่ง (x)
                 const x = isPendulum ? (params.A/150) * Math.cos(phase) : params.A * Math.cos(phase);
-                // คำนวณความเร็ว (v) -> v_max = omega * A
+                // คำนวณความเร็ว (v)
                 const v = isPendulum ? -(params.A/150) * omega * Math.sin(phase) : -params.A * omega * Math.sin(phase);
+                // คำนวณความเร่ง (a) -> a = -omega^2 * x
+                const a = isPendulum ? -(params.A/150) * Math.pow(omega, 2) * Math.cos(phase) : -params.A * Math.pow(omega, 2) * Math.cos(phase);
                 
-                return { omega, T, x, v, phase };
+                return { omega, T, x, v, a, phase };
             }, [topic, params, time]);
 
+            // อัพเดตกราฟสำหรับหัวข้อที่ 4
+            useEffect(() => {
+                if (topic === 4) {
+                    graphHistory.current.push({ t: time, x: physics.x, v: physics.v });
+                    if (graphHistory.current.length > 200) {
+                        graphHistory.current.shift();
+                    }
+                } else {
+                    graphHistory.current = [];
+                }
+            }, [time, topic, physics.x, physics.v]);
+
             const renderSimulation = () => {
-                const { x, v } = physics;
+                const { x, v, a, phase, T } = physics;
                 const cx = 200, cy = 110;
 
-                if (topic === 6) { // โหมดลูกตุ้ม: พิสูจน์เรื่อง L และ m
+                // --- บทที่ 6: ลูกตุ้มนาฬิกา ---
+                if (topic === 6) { 
                     const lx = cx + Math.sin(x) * (params.L * 70);
                     const ly = 20 + Math.cos(x) * (params.L * 70);
                     return (
@@ -76,35 +91,92 @@
                             <line x1={cx} y1="20" x2={lx} y2={ly} stroke="#94a3b8" strokeWidth="4" />
                             <circle cx={cx} cy="20" r="6" fill="#1e293b" />
                             <circle cx={lx} cy={ly} r={15 + params.m * 5} fill="#2563eb" stroke="white" strokeWidth="3" />
-                            <text x={lx} y={ly+5} fill="white" textAnchor="middle" className="text-[10px] font-black">{params.m}kg</text>
+                            <text x={lx} y={ly+5} fill="white" textAnchor="middle" className="text-[10px] font-black">{params.m.toFixed(1)}kg</text>
                             <text x={cx} y="200" textAnchor="middle" className="text-xs font-bold text-slate-400 italic">"ลองปรับมวลดู... ความเร็วแกว่งจะไม่เปลี่ยน!"</text>
                         </svg>
                     );
                 }
 
-                // โหมดสปริงและอื่นๆ: พิสูจน์เรื่อง k และ m
+                // --- บทที่ 4: วิเคราะห์กราฟ ---
+                if (topic === 4) {
+                    const springY = 30;
+                    const graphY = 130;
+                    
+                    const pointsX = graphHistory.current.map((pt, i) => `${i * 2},${graphY - pt.x * 0.5}`).join(' ');
+                    const pointsV = graphHistory.current.map((pt, i) => `${i * 2},${graphY - pt.v * 0.5}`).join(' ');
+
+                    return (
+                        <svg width="100%" height="220" viewBox="0 0 400 220" className="drop-shadow-xl">
+                            {/* สปริงด้านบน */}
+                            <line x1={cx} y1={10} x2={cx} y2={60} stroke="#cbd5e1" strokeDasharray="5,5" />
+                            <rect x="0" y={10} width="15" height="40" fill="#1e293b" />
+                            <path d={`M 15,${springY} ${Array.from({length: 21}).map((_, i) => `L ${15 + i*(150+x)/21},${springY + (i%2?10:-10)*(i===0||i===21?0:1)}`).join(' ')}`} fill="none" stroke="#2563eb" strokeWidth={2 + params.k/10} />
+                            <rect x={15+150+x-20} y={springY-20} width="40" height="40" rx="8" fill="#2563eb" stroke="white" strokeWidth="2" />
+                            <text x={15+150+x} y={springY+4} fill="white" textAnchor="middle" className="text-[10px] font-black">{params.m.toFixed(1)}</text>
+
+                            {/* วาดกราฟ */}
+                            <line x1="0" y1={graphY} x2="400" y2={graphY} stroke="#cbd5e1" strokeWidth="1" />
+                            {pointsX && <polyline points={pointsX} fill="none" stroke="#3b82f6" strokeWidth="2" />}
+                            {pointsV && <polyline points={pointsV} fill="none" stroke="#10b981" strokeWidth="2" />}
+                            
+                            {/* คำอธิบายกราฟ */}
+                            <rect x="280" y="180" width="10" height="10" fill="#3b82f6" />
+                            <text x="295" y="189" fontSize="10" fill="#3b82f6" fontWeight="bold">ตำแหน่ง (x)</text>
+                            <rect x="280" y="198" width="10" height="10" fill="#10b981" />
+                            <text x="295" y="207" fontSize="10" fill="#10b981" fontWeight="bold">ความเร็ว (v)</text>
+                            
+                            {/* จุดปัจจุบันบนกราฟ */}
+                            {graphHistory.current.length > 0 && (
+                                <g transform={`translate(${(graphHistory.current.length-1)*2}, 0)`}>
+                                    <circle cx="0" cy={graphY - x*0.5} r="4" fill="#3b82f6" />
+                                    <circle cx="0" cy={graphY - v*0.5} r="4" fill="#10b981" />
+                                    <line x1="0" y1={80} x2="0" y2="220" stroke="#cbd5e1" strokeDasharray="3,3" />
+                                </g>
+                            )}
+                        </svg>
+                    );
+                }
+
+                // --- บทที่ 1, 2, 3, 5: วัตถุติดปลายสปริง ---
                 return (
                     <svg width="100%" height="220" viewBox="0 0 400 220" className="drop-shadow-xl">
                         <line x1={cx} y1="40" x2={cx} y2="180" stroke="#cbd5e1" strokeDasharray="5,5" />
                         <rect x="0" y="90" width="15" height="40" fill="#1e293b" />
                         <path d={`M 15,110 ${Array.from({length: 21}).map((_, i) => `L ${15 + i*(150+x)/21},${110 + (i%2?20:-20)*(i===0||i===21?0:1)}`).join(' ')}`} fill="none" stroke={topic === 1 ? "#ef4444" : "#2563eb"} strokeWidth={2 + params.k/10} />
                         <rect x={15+150+x-25} y="85" width="50" height="50" rx="10" fill="#2563eb" stroke="white" strokeWidth="3" />
-                        <text x={15+150+x} y="115" fill="white" textAnchor="middle" className="text-xs font-black">{params.m}kg</text>
+                        <text x={15+150+x} y="115" fill="white" textAnchor="middle" className="text-xs font-black">{params.m.toFixed(1)}kg</text>
                         
-                        {/* แสดงแรงดึงกลับในบทที่ 1 */}
+                        {/* บทที่ 1: แรงดึงกลับ (Force) */}
                         {topic === 1 && (
                             <g>
-                                <line x1={15+150+x} y1="110" x2={cx} y2="110" stroke="#ef4444" strokeWidth="6" markerEnd="url(#arr)" />
+                                <line x1={15+150+x} y1="110" x2={cx} y2="110" stroke="#ef4444" strokeWidth="6" markerEnd="url(#arr-f)" />
                                 <text x={(15+150+x+cx)/2} y="95" fill="#ef4444" textAnchor="middle" className="text-[10px] font-black italic">แรง F = -{params.k}x</text>
-                                <defs><marker id="arr" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444"/></marker></defs>
+                                <defs><marker id="arr-f" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444"/></marker></defs>
                             </g>
                         )}
-                        {/* แสดงความเร็วในบทที่ 3 */}
+
+                        {/* บทที่ 2: คาบเวลา (Period Timer) */}
+                        {topic === 2 && (
+                            <g transform="translate(350, 40)">
+                                <circle cx="0" cy="0" r="20" fill="none" stroke="#e2e8f0" strokeWidth="4" />
+                                <path d={`M 0 -20 A 20 20 0 ${phase % (2*Math.PI) > Math.PI ? 1 : 0} 1 ${20 * Math.sin(phase % (2*Math.PI))} ${-20 * Math.cos(phase % (2*Math.PI))}`} fill="none" stroke="#f59e0b" strokeWidth="4" />
+                                <text x="0" y="4" textAnchor="middle" fontSize="10" fontWeight="bold" fill="#f59e0b">{( (phase % (2*Math.PI)) / (2*Math.PI) * T ).toFixed(1)}s</text>
+                                <text x="0" y="35" textAnchor="middle" fontSize="10" fontWeight="bold" fill="#94a3b8">คาบ = {T.toFixed(2)}s</text>
+                            </g>
+                        )}
+
+                        {/* บทที่ 3: ความเร็ว (v) และความเร่ง (a) */}
                         {topic === 3 && (
                             <g>
-                                <line x1={15+150+x} y1="150" x2={15+150+x + v*1.2} y2="150" stroke="#10b981" strokeWidth="6" markerEnd="url(#arr-v)" />
-                                <text x={15+150+x + v*1.2} y="170" fill="#10b981" textAnchor="middle" className="text-[10px] font-black">v = {Math.abs(v).toFixed(0)}</text>
-                                <defs><marker id="arr-v" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#10b981"/></marker></defs>
+                                {/* ความเร็ว (สีเขียว) */}
+                                <line x1={15+150+x} y1="145" x2={15+150+x + v*1.2} y2="145" stroke="#10b981" strokeWidth="4" markerEnd="url(#arr-v)" />
+                                <text x={15+150+x + v*1.2} y="135" fill="#10b981" textAnchor="middle" className="text-[10px] font-black">v = {Math.abs(v).toFixed(0)}</text>
+                                <defs><marker id="arr-v" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="3" markerHeight="3" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#10b981"/></marker></defs>
+                                
+                                {/* ความเร่ง (สีม่วง) ย่อสเกลลง 0.02 เพราะค่า a จะสูงมาก */}
+                                <line x1={15+150+x} y1="165" x2={15+150+x + a*0.02} y2="165" stroke="#9333ea" strokeWidth="4" markerEnd="url(#arr-a)" />
+                                <text x={15+150+x + a*0.02} y="180" fill="#9333ea" textAnchor="middle" className="text-[10px] font-black">a = {Math.abs(a).toFixed(0)}</text>
+                                <defs><marker id="arr-a" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="3" markerHeight="3" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#9333ea"/></marker></defs>
                             </g>
                         )}
                     </svg>
@@ -112,12 +184,12 @@
             };
 
             const topicData = [
-                { id: 1, title: '1. ลักษณะการเคลื่อนที่', logic: 'แรงดึงกลับ (F) แปรผันตามค่า k และระยะ x', formula: `F = -${params.k} × x` },
-                { id: 2, title: '2. ปริมาณที่เกี่ยวข้อง', logic: 'คาบ (T) คือเวลาครบรอบ สังเกตเวลาที่วัตถุวิ่งกลับมาที่เดิม', formula: `T = ${physics.T.toFixed(2)} วินาที` },
-                { id: 3, title: '3. ความสัมพันธ์ x, v, a', logic: 'แอมพลิจูด (A) มาก จะทำให้ความเร็วสูงสุด (v_max) มากขึ้นด้วย', formula: `v_max = ωA = ${(physics.omega * params.A).toFixed(0)}` },
-                { id: 4, title: '4. วิเคราะห์กราฟ', logic: 'กราฟตำแหน่ง (x) และความเร็ว (v) จะเยื้องเฟสกันเสมอ', formula: `x = ${params.A} cos(ωt)` },
-                { id: 5, title: '5. วัตถุติดปลายสปริง', logic: 'มวล (m) อยู่ตัวหาร ยิ่งมวลมาก วัตถุยิ่งเฉื่อยและสั่นช้าลง', formula: `ω = √(${params.k} / ${params.m}) = ${physics.omega.toFixed(2)}` },
-                { id: 6, title: '6. ลูกตุ้มนาฬิกา', logic: 'เชือกยิ่งยาว (L) คาบแกว่งยิ่งนานขึ้น แต่มวลไม่มีผลเลย', formula: `ω = √(9.8 / ${params.L}) = ${physics.omega.toFixed(2)}` }
+                { id: 1, title: '1. ลักษณะการเคลื่อนที่', logic: 'แรงดึงกลับ (F) แปรผันตามค่า k และระยะ x (ชี้เข้าหาจุดสมดุลเสมอ)', formula: `F = -${params.k} × x` },
+                { id: 2, title: '2. ปริมาณที่เกี่ยวข้อง', logic: 'คาบ (T) คือเวลาครบรอบ สังเกตหน้าปัดนาฬิกาจับเวลาขวาบน', formula: `T = ${physics.T.toFixed(2)} วินาที` },
+                { id: 3, title: '3. ความสัมพันธ์ x, v, a', logic: 'v มากสุดตรงกลาง, a มากสุดที่ริมขอบ (ทิศตรงข้ามระยะ x)', formula: `v_max = ${(physics.omega * params.A).toFixed(0)}, a_max = ${(Math.pow(physics.omega, 2) * params.A).toFixed(0)}` },
+                { id: 4, title: '4. วิเคราะห์กราฟ', logic: 'กราฟตำแหน่ง (x) และความเร็ว (v) จะเยื้องเฟสกัน 90° เสมอ', formula: `x = A cos(ωt), v = -ωA sin(ωt)` },
+                { id: 5, title: '5. วัตถุติดปลายสปริง', logic: 'มวล (m) อยู่ตัวหาร ยิ่งมวลมากสั่นช้าลง (สปริงหนาขึ้นตามค่า k)', formula: `ω = √(${params.k} / ${params.m.toFixed(1)}) = ${physics.omega.toFixed(2)}` },
+                { id: 6, title: '6. ลูกตุ้มนาฬิกา', logic: 'เชือกยิ่งยาว (L) คาบแกว่งยิ่งนาน แต่มวลไม่มีผลเลย', formula: `ω = √(9.8 / ${params.L.toFixed(1)}) = ${physics.omega.toFixed(2)}` }
             ];
 
             return (
@@ -126,7 +198,7 @@
                     {/* Topic Menu */}
                     <div className="bg-white border-b border-slate-200 p-2 overflow-x-auto tab-scroll flex gap-2 z-30">
                         {topicData.map(t => (
-                            <button key={t.id} onClick={() => setTopic(t.id)} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase whitespace-nowrap transition-all ${topic === t.id ? 'active-tab shadow-lg' : 'text-slate-400 bg-slate-100'}`}>
+                            <button key={t.id} onClick={() => { setTopic(t.id); setTime(0); }} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase whitespace-nowrap transition-all ${topic === t.id ? 'active-tab shadow-lg' : 'text-slate-400 bg-slate-100'}`}>
                                 บทที่ {t.id}
                             </button>
                         ))}
@@ -155,9 +227,17 @@
                             <div className="p-6 pt-0">
                                 <div className="math-box shadow-lg">
                                     <div className="text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest opacity-60">วิธีคิดและค่าที่คำนวณได้จริง:</div>
-                                    <div className="text-lg flex justify-center items-center gap-2">
-                                        <span className="mono">{topicData[topic-1].formula.split('=')[0]} = </span>
-                                        <span className="highlight-num">{topicData[topic-1].formula.split('=')[1]}</span>
+                                    <div className="text-sm md:text-lg flex justify-center items-center gap-2">
+                                        {topic === 4 ? (
+                                            <span className="mono text-center leading-snug">{topicData[topic-1].formula}</span>
+                                        ) : topic === 3 ? (
+                                            <span className="mono text-center leading-snug">{topicData[topic-1].formula}</span>
+                                        ) : (
+                                            <>
+                                                <span className="mono">{topicData[topic-1].formula.split('=')[0]} = </span>
+                                                <span className="highlight-num">{topicData[topic-1].formula.split('=')[1]}</span>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -181,18 +261,18 @@
                             {topic === 6 ? (
                                 <div className="col-span-2 space-y-4">
                                     <div className="space-y-2">
-                                        <div className="flex justify-between text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">ยาวเชือก (L): <span className="text-blue-600 font-mono">{params.L}m</span></div>
+                                        <div className="flex justify-between text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">ยาวเชือก (L): <span className="text-blue-600 font-mono">{params.L.toFixed(1)}m</span></div>
                                         <input type="range" min="0.5" max="2.5" step="0.1" value={params.L} onChange={e => setParams({...params, L: +e.target.value})} />
                                     </div>
                                     <div className="space-y-2">
-                                        <div className="flex justify-between text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">มวล (m): <span className="text-blue-600 font-mono">{params.m}kg</span></div>
+                                        <div className="flex justify-between text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">มวล (m): <span className="text-blue-600 font-mono">{params.m.toFixed(1)}kg</span></div>
                                         <input type="range" min="0.5" max="5.0" step="0.5" value={params.m} onChange={e => setParams({...params, m: +e.target.value})} />
                                     </div>
                                 </div>
                             ) : (
                                 <>
                                     <div className="space-y-2">
-                                        <div className="flex justify-between text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">มวล (m): <span className="text-blue-600 font-mono">{params.m}kg</span></div>
+                                        <div className="flex justify-between text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">มวล (m): <span className="text-blue-600 font-mono">{params.m.toFixed(1)}kg</span></div>
                                         <input type="range" min="0.5" max="5.0" step="0.5" value={params.m} onChange={e => setParams({...params, m: +e.target.value})} />
                                     </div>
                                     <div className="space-y-2">
